@@ -1,0 +1,627 @@
+/*
+  # ESSA - Eswatini Schools Association Sports Management System
+  
+  ## Core Schema
+
+  This migration creates the foundation of the ESSA sports management system:
+
+  ### New Tables
+
+  1. `profiles` - Extended user profiles tied to auth.users
+     - role: essa_admin | school_admin | teacher | referee
+     - links to school if applicable
+
+  2. `schools` - Registered schools under ESSA
+     - school code, name, region, contact details
+     - assigned admin user
+
+  3. `sport_activities` - Types of sport at a school (e.g., soccer, netball)
+     - links to school, assigned teacher
+
+  4. `players` - Student-players registered at a school
+     - authentication fields: student ID, year, parent contact, photo URL
+     - verified flag
+
+  5. `player_activity` - Links players to sport activities at a school
+
+  6. `draws` - Tournament draws created by ESSA
+     - stage (1, 2, 3), sport, dates, participating schools
+
+  7. `draw_matches` - Individual matches within a draw
+     - home school, away school, venue, date
+
+  8. `squads` - Selected team for a specific draw match
+     - per school per match
+
+  9. `squad_players` - Individual players in a squad with positions
+
+  10. `announcements` - ESSA announcements visible to schools
+
+  11. `player_updates` - Audit log for player data updates
+
+  ### Security
+  - RLS enabled on all tables
+  - Role-based access via profiles.role
+*/
+
+--profiles table
+CREATE TABLE IF NOT EXISTS profiles(
+  id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  full_name text NOT NULL DEFAULT '',
+  email text NOT NULL DEFAULT '',
+  role text NOT NULL DEFAULT 'school_admin' CHECK(role IN('essa_admin', 'school_admin', 'teacher', 'referee')),
+  school_id uuid,
+  phone text DEFAULT '',
+  must_change_password boolean DEFAULT false,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view own profile"
+  ON profiles FOR SELECT
+  TO authenticated
+USING(auth.uid() = id);
+
+CREATE POLICY "Users can update own profile"
+  ON profiles FOR UPDATE
+  TO authenticated
+USING(auth.uid() = id)
+  WITH CHECK(auth.uid() = id);
+
+CREATE POLICY "ESSA admins can view all profiles"
+  ON profiles FOR SELECT
+  TO authenticated
+USING(
+  EXISTS(SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'essa_admin')
+);
+
+CREATE POLICY "ESSA admins can insert profiles"
+  ON profiles FOR INSERT
+  TO authenticated
+  WITH CHECK(
+  EXISTS(SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'essa_admin')
+);
+
+CREATE POLICY "ESSA admins can update all profiles"
+  ON profiles FOR UPDATE
+  TO authenticated
+USING(
+  EXISTS(SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'essa_admin')
+)
+  WITH CHECK(
+  EXISTS(SELECT 1 FROM profiles p WHERE p.id = auth.uid() AND p.role = 'essa_admin')
+);
+
+CREATE POLICY "School admins can view teachers in their school"
+  ON profiles FOR SELECT
+  TO authenticated
+USING(
+  EXISTS(
+    SELECT 1 FROM profiles p 
+      WHERE p.id = auth.uid() AND p.role = 'school_admin' AND p.school_id = profiles.school_id
+  )
+);
+
+CREATE POLICY "School admins can insert teachers in their school"
+  ON profiles FOR INSERT
+  TO authenticated
+  WITH CHECK(
+  EXISTS(
+    SELECT 1 FROM profiles p 
+      WHERE p.id = auth.uid() AND p.role = 'school_admin'
+  )
+);
+
+CREATE POLICY "School admins can update teachers in their school"
+  ON profiles FOR UPDATE
+  TO authenticated
+USING(
+  EXISTS(
+    SELECT 1 FROM profiles p 
+      WHERE p.id = auth.uid() AND p.role = 'school_admin' AND p.school_id = profiles.school_id
+  )
+)
+  WITH CHECK(
+  EXISTS(
+    SELECT 1 FROM profiles p 
+      WHERE p.id = auth.uid() AND p.role = 'school_admin' AND p.school_id = profiles.school_id
+  )
+);
+
+--schools table
+CREATE TABLE IF NOT EXISTS schools(
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name text NOT NULL,
+  code text UNIQUE NOT NULL,
+  region text NOT NULL DEFAULT '',
+  address text DEFAULT '',
+  phone text DEFAULT '',
+  email text DEFAULT '',
+  admin_id uuid REFERENCES profiles(id),
+  is_active boolean DEFAULT true,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE schools ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Authenticated users can view active schools"
+  ON schools FOR SELECT
+  TO authenticated
+USING(is_active = true);
+
+CREATE POLICY "ESSA admins can insert schools"
+  ON schools FOR INSERT
+  TO authenticated
+  WITH CHECK(
+  EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'essa_admin')
+);
+
+CREATE POLICY "ESSA admins can update schools"
+  ON schools FOR UPDATE
+  TO authenticated
+USING(
+  EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'essa_admin')
+)
+  WITH CHECK(
+  EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'essa_admin')
+);
+
+--Add foreign key for profiles.school_id after schools table is created
+ALTER TABLE profiles ADD CONSTRAINT profiles_school_id_fkey 
+  FOREIGN KEY(school_id) REFERENCES schools(id) ON DELETE SET NULL;
+
+--sport_activities table
+CREATE TABLE IF NOT EXISTS sport_activities(
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  school_id uuid NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  name text NOT NULL,
+  category text NOT NULL DEFAULT 'team' CHECK(category IN('team', 'individual')),
+  teacher_id uuid REFERENCES profiles(id) ON DELETE SET NULL,
+  is_active boolean DEFAULT true,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE sport_activities ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Users can view sport activities for their school"
+  ON sport_activities FOR SELECT
+  TO authenticated
+USING(
+  EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND school_id = sport_activities.school_id)
+    OR EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'essa_admin')
+);
+
+CREATE POLICY "School admins can insert sport activities"
+  ON sport_activities FOR INSERT
+  TO authenticated
+  WITH CHECK(
+  EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'school_admin' AND school_id = sport_activities.school_id)
+    OR EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'essa_admin')
+);
+
+CREATE POLICY "School admins and assigned teachers can update sport activities"
+  ON sport_activities FOR UPDATE
+  TO authenticated
+USING(
+  EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'school_admin' AND school_id = sport_activities.school_id)
+    OR(teacher_id = auth.uid())
+    OR EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'essa_admin')
+)
+  WITH CHECK(
+  EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'school_admin' AND school_id = sport_activities.school_id)
+    OR EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'essa_admin')
+);
+
+--players table
+CREATE TABLE IF NOT EXISTS players(
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  school_id uuid NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+  first_name text NOT NULL,
+  last_name text NOT NULL,
+  date_of_birth date NOT NULL,
+  student_id text NOT NULL,
+  enrollment_year integer NOT NULL,
+  grade text NOT NULL,
+  parent_name text DEFAULT '',
+  parent_phone text DEFAULT '',
+  photo_url text DEFAULT '',
+  id_document_url text DEFAULT '',
+  is_verified boolean DEFAULT false,
+  verification_code text UNIQUE DEFAULT NULL,
+  registered_by uuid REFERENCES profiles(id),
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  UNIQUE(school_id, student_id, enrollment_year)
+);
+
+ALTER TABLE players ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "School members can view their school players"
+  ON players FOR SELECT
+  TO authenticated
+USING(
+  EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND school_id = players.school_id)
+    OR EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'essa_admin')
+    OR EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'referee')
+);
+
+CREATE POLICY "School admins and teachers can insert players"
+  ON players FOR INSERT
+  TO authenticated
+  WITH CHECK(
+  EXISTS(
+    SELECT 1 FROM profiles 
+      WHERE id = auth.uid() 
+      AND school_id = players.school_id 
+      AND role IN('school_admin', 'teacher')
+  )
+    OR EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'essa_admin')
+);
+
+CREATE POLICY "School admins and teachers can update players"
+  ON players FOR UPDATE
+  TO authenticated
+USING(
+  EXISTS(
+    SELECT 1 FROM profiles 
+      WHERE id = auth.uid() 
+      AND school_id = players.school_id 
+      AND role IN('school_admin', 'teacher')
+  )
+    OR EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'essa_admin')
+)
+  WITH CHECK(
+  EXISTS(
+    SELECT 1 FROM profiles 
+      WHERE id = auth.uid() 
+      AND school_id = players.school_id 
+      AND role IN('school_admin', 'teacher')
+  )
+    OR EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'essa_admin')
+);
+
+--player_updates audit log
+CREATE TABLE IF NOT EXISTS player_updates(
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  player_id uuid NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+  updated_by uuid NOT NULL REFERENCES profiles(id),
+  update_reason text DEFAULT '',
+  old_data jsonb,
+  new_data jsonb,
+  verification_code_used text DEFAULT '',
+  created_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE player_updates ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "ESSA admins can view all player updates"
+  ON player_updates FOR SELECT
+  TO authenticated
+USING(
+  EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'essa_admin')
+);
+
+CREATE POLICY "School members can view updates for their school players"
+  ON player_updates FOR SELECT
+  TO authenticated
+USING(
+  EXISTS(
+    SELECT 1 FROM players pl
+      JOIN profiles pr ON pr.school_id = pl.school_id
+      WHERE pl.id = player_updates.player_id AND pr.id = auth.uid()
+  )
+);
+
+CREATE POLICY "School members can insert player updates"
+  ON player_updates FOR INSERT
+  TO authenticated
+  WITH CHECK(
+  EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN('essa_admin', 'school_admin', 'teacher'))
+);
+
+--player_activity junction table
+CREATE TABLE IF NOT EXISTS player_activity(
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  player_id uuid NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+  activity_id uuid NOT NULL REFERENCES sport_activities(id) ON DELETE CASCADE,
+  joined_at timestamptz DEFAULT now(),
+  UNIQUE(player_id, activity_id)
+);
+
+ALTER TABLE player_activity ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "School members can view player activities"
+  ON player_activity FOR SELECT
+  TO authenticated
+USING(
+  EXISTS(
+    SELECT 1 FROM players pl
+      JOIN profiles pr ON pr.school_id = pl.school_id
+      WHERE pl.id = player_activity.player_id AND pr.id = auth.uid()
+  )
+    OR EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN('essa_admin', 'referee'))
+);
+
+CREATE POLICY "School admins and teachers can insert player activities"
+  ON player_activity FOR INSERT
+  TO authenticated
+  WITH CHECK(
+  EXISTS(
+    SELECT 1 FROM players pl
+      JOIN profiles pr ON pr.school_id = pl.school_id
+      WHERE pl.id = player_activity.player_id 
+      AND pr.id = auth.uid()
+      AND pr.role IN('school_admin', 'teacher')
+  )
+    OR EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'essa_admin')
+);
+
+CREATE POLICY "School admins and teachers can delete player activities"
+  ON player_activity FOR DELETE
+  TO authenticated
+USING(
+  EXISTS(
+    SELECT 1 FROM players pl
+      JOIN profiles pr ON pr.school_id = pl.school_id
+      WHERE pl.id = player_activity.player_id 
+      AND pr.id = auth.uid()
+      AND pr.role IN('school_admin', 'teacher')
+  )
+    OR EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'essa_admin')
+);
+
+--draws table(tournament draws by ESSA)
+CREATE TABLE IF NOT EXISTS draws(
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  title text NOT NULL,
+  sport text NOT NULL,
+  stage integer NOT NULL CHECK(stage IN(1, 2, 3)),
+  season text NOT NULL,
+  description text DEFAULT '',
+  is_published boolean DEFAULT false,
+  created_by uuid REFERENCES profiles(id),
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE draws ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Authenticated users can view published draws"
+  ON draws FOR SELECT
+  TO authenticated
+USING(
+  is_published = true
+    OR EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'essa_admin')
+);
+
+CREATE POLICY "ESSA admins can insert draws"
+  ON draws FOR INSERT
+  TO authenticated
+  WITH CHECK(
+  EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'essa_admin')
+);
+
+CREATE POLICY "ESSA admins can update draws"
+  ON draws FOR UPDATE
+  TO authenticated
+USING(
+  EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'essa_admin')
+)
+  WITH CHECK(
+  EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'essa_admin')
+);
+
+--draw_matches table
+CREATE TABLE IF NOT EXISTS draw_matches(
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  draw_id uuid NOT NULL REFERENCES draws(id) ON DELETE CASCADE,
+  home_school_id uuid NOT NULL REFERENCES schools(id),
+  away_school_id uuid NOT NULL REFERENCES schools(id),
+  match_date timestamptz NOT NULL,
+  venue text DEFAULT '',
+  match_number integer,
+  notes text DEFAULT '',
+  created_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE draw_matches ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Authenticated users can view draw matches"
+  ON draw_matches FOR SELECT
+  TO authenticated
+USING(
+  EXISTS(
+    SELECT 1 FROM draws d WHERE d.id = draw_matches.draw_id AND(
+      d.is_published = true
+        OR EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'essa_admin')
+    )
+  )
+);
+
+CREATE POLICY "ESSA admins can insert draw matches"
+  ON draw_matches FOR INSERT
+  TO authenticated
+  WITH CHECK(
+  EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'essa_admin')
+);
+
+CREATE POLICY "ESSA admins can update draw matches"
+  ON draw_matches FOR UPDATE
+  TO authenticated
+USING(
+  EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'essa_admin')
+)
+  WITH CHECK(
+  EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'essa_admin')
+);
+
+--squads table
+CREATE TABLE IF NOT EXISTS squads(
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  draw_match_id uuid NOT NULL REFERENCES draw_matches(id) ON DELETE CASCADE,
+  school_id uuid NOT NULL REFERENCES schools(id),
+  activity_id uuid NOT NULL REFERENCES sport_activities(id),
+  selected_by uuid REFERENCES profiles(id),
+  squad_barcode text UNIQUE DEFAULT gen_random_uuid():: text,
+  is_finalized boolean DEFAULT false,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now(),
+  UNIQUE(draw_match_id, school_id)
+);
+
+ALTER TABLE squads ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "School members can view their school squads"
+  ON squads FOR SELECT
+  TO authenticated
+USING(
+  EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND school_id = squads.school_id)
+    OR EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN('essa_admin', 'referee'))
+);
+
+CREATE POLICY "Teachers and school admins can insert squads"
+  ON squads FOR INSERT
+  TO authenticated
+  WITH CHECK(
+  EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND school_id = squads.school_id AND role IN('school_admin', 'teacher'))
+    OR EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'essa_admin')
+);
+
+CREATE POLICY "Teachers and school admins can update squads"
+  ON squads FOR UPDATE
+  TO authenticated
+USING(
+  EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND school_id = squads.school_id AND role IN('school_admin', 'teacher'))
+    OR EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'essa_admin')
+)
+  WITH CHECK(
+  EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND school_id = squads.school_id AND role IN('school_admin', 'teacher'))
+    OR EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'essa_admin')
+);
+
+--squad_players table
+CREATE TABLE IF NOT EXISTS squad_players(
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  squad_id uuid NOT NULL REFERENCES squads(id) ON DELETE CASCADE,
+  player_id uuid NOT NULL REFERENCES players(id),
+  position text NOT NULL DEFAULT '',
+  jersey_number integer,
+  is_captain boolean DEFAULT false,
+  school_verified boolean DEFAULT false,
+  added_by uuid REFERENCES profiles(id),
+  created_at timestamptz DEFAULT now(),
+  UNIQUE(squad_id, player_id)
+);
+
+ALTER TABLE squad_players ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "School members and referees can view squad players"
+  ON squad_players FOR SELECT
+  TO authenticated
+USING(
+  EXISTS(
+    SELECT 1 FROM squads s
+      JOIN profiles pr ON pr.school_id = s.school_id
+      WHERE s.id = squad_players.squad_id AND pr.id = auth.uid()
+  )
+    OR EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN('essa_admin', 'referee'))
+);
+
+CREATE POLICY "Teachers and school admins can insert squad players"
+  ON squad_players FOR INSERT
+  TO authenticated
+  WITH CHECK(
+  EXISTS(
+    SELECT 1 FROM squads s
+      JOIN profiles pr ON pr.school_id = s.school_id
+      WHERE s.id = squad_players.squad_id AND pr.id = auth.uid() AND pr.role IN('school_admin', 'teacher')
+  )
+    OR EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'essa_admin')
+);
+
+CREATE POLICY "Teachers and school admins can update squad players"
+  ON squad_players FOR UPDATE
+  TO authenticated
+USING(
+  EXISTS(
+    SELECT 1 FROM squads s
+      JOIN profiles pr ON pr.school_id = s.school_id
+      WHERE s.id = squad_players.squad_id AND pr.id = auth.uid() AND pr.role IN('school_admin', 'teacher')
+  )
+    OR EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'essa_admin')
+)
+  WITH CHECK(
+  EXISTS(
+    SELECT 1 FROM squads s
+      JOIN profiles pr ON pr.school_id = s.school_id
+      WHERE s.id = squad_players.squad_id AND pr.id = auth.uid() AND pr.role IN('school_admin', 'teacher')
+  )
+    OR EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'essa_admin')
+);
+
+CREATE POLICY "Teachers and school admins can delete squad players"
+  ON squad_players FOR DELETE
+  TO authenticated
+USING(
+  EXISTS(
+    SELECT 1 FROM squads s
+      JOIN profiles pr ON pr.school_id = s.school_id
+      WHERE s.id = squad_players.squad_id AND pr.id = auth.uid() AND pr.role IN('school_admin', 'teacher')
+  )
+    OR EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'essa_admin')
+);
+
+--announcements table
+CREATE TABLE IF NOT EXISTS announcements(
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  title text NOT NULL,
+  content text NOT NULL,
+  is_published boolean DEFAULT false,
+  target_schools uuid[] DEFAULT '{}',
+  created_by uuid REFERENCES profiles(id),
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE announcements ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Authenticated users can view published announcements"
+  ON announcements FOR SELECT
+  TO authenticated
+USING(
+  is_published = true
+    OR EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'essa_admin')
+);
+
+CREATE POLICY "ESSA admins can insert announcements"
+  ON announcements FOR INSERT
+  TO authenticated
+  WITH CHECK(
+  EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'essa_admin')
+);
+
+CREATE POLICY "ESSA admins can update announcements"
+  ON announcements FOR UPDATE
+  TO authenticated
+USING(
+  EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'essa_admin')
+)
+  WITH CHECK(
+  EXISTS(SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'essa_admin')
+);
+
+--indexes for performance
+CREATE INDEX IF NOT EXISTS idx_profiles_school_id ON profiles(school_id);
+CREATE INDEX IF NOT EXISTS idx_profiles_role ON profiles(role);
+CREATE INDEX IF NOT EXISTS idx_players_school_id ON players(school_id);
+CREATE INDEX IF NOT EXISTS idx_players_student_id ON players(student_id);
+CREATE INDEX IF NOT EXISTS idx_players_verification_code ON players(verification_code);
+CREATE INDEX IF NOT EXISTS idx_sport_activities_school_id ON sport_activities(school_id);
+CREATE INDEX IF NOT EXISTS idx_sport_activities_teacher_id ON sport_activities(teacher_id);
+CREATE INDEX IF NOT EXISTS idx_draw_matches_draw_id ON draw_matches(draw_id);
+CREATE INDEX IF NOT EXISTS idx_squad_players_squad_id ON squad_players(squad_id);
+CREATE INDEX IF NOT EXISTS idx_squads_barcode ON squads(squad_barcode);
