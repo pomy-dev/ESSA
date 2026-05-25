@@ -22,7 +22,7 @@ export default function AnnouncementsClient({ initialAnnouncements, schools }: {
   const [loading, setLoading] = useState(false)
   const [selectedSchools, setSelectedSchools] = useState<string[]>([])
 
-  const [form, setForm] = useState({ title: '', content: '' })
+  const [form, setForm] = useState({ title: '', content: '', starts_at: '', expires_at: '' })
 
   function addToast(t: ToastMessage) { setToasts(prev => [...prev, t]) }
 
@@ -40,6 +40,8 @@ export default function AnnouncementsClient({ initialAnnouncements, schools }: {
       content: form.content,
       is_published: false,
       target_schools: selectedSchools,
+      starts_at: form.starts_at ? new Date(form.starts_at).toISOString() : null,
+      expires_at: form.expires_at ? new Date(form.expires_at).toISOString() : null,
       created_by: user!.id,
     }).select().single()
 
@@ -48,7 +50,7 @@ export default function AnnouncementsClient({ initialAnnouncements, schools }: {
       setAnnouncements(a => [data, ...a])
       addToast(makeToast('success', 'Announcement created'))
       setShowModal(false)
-      setForm({ title: '', content: '' })
+      setForm({ title: '', content: '', starts_at: '', expires_at: '' })
       setSelectedSchools([])
     }
     setLoading(false)
@@ -97,6 +99,9 @@ export default function AnnouncementsClient({ initialAnnouncements, schools }: {
                 </div>
                 <p className="text-sm text-slate-600 mt-1 line-clamp-2">{ann.content}</p>
                 <div className="text-xs text-slate-400 mt-1">{format(new Date(ann.created_at), 'dd MMM yyyy')}</div>
+                {ann.expires_at && (
+                  <div className="text-xs text-slate-400 mt-0.5">Expires {format(new Date(ann.expires_at), 'dd MMM yyyy HH:mm')}</div>
+                )}
               </div>
               <Button variant="outline" size="sm" onClick={() => togglePublish(ann)}>
                 {ann.is_published ? 'Unpublish' : 'Publish'}
@@ -121,6 +126,10 @@ export default function AnnouncementsClient({ initialAnnouncements, schools }: {
               onChange={e => setForm(f => ({ ...f, content: e.target.value }))}
               required
             />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Input label="Starts At" type="datetime-local" value={form.starts_at} onChange={e => setForm(f => ({ ...f, starts_at: e.target.value }))} />
+            <Input label="Expires At" type="datetime-local" value={form.expires_at} onChange={e => setForm(f => ({ ...f, expires_at: e.target.value }))} />
           </div>
           <div>
             <label className="text-sm font-medium text-slate-700 block mb-2">

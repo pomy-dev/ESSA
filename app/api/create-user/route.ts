@@ -30,7 +30,15 @@ interface SetupEssaAdminBody {
   essaPassword: string
 }
 
-type RequestBody = CreateSchoolBody | CreateTeacherBody | SetupEssaAdminBody
+interface CreateEssaMemberBody {
+  action: 'create_essa_member'
+  memberName: string
+  memberEmail: string
+  memberPassword: string
+  phone?: string
+}
+
+type RequestBody = CreateSchoolBody | CreateTeacherBody | SetupEssaAdminBody | CreateEssaMemberBody
 
 function json(body: Record<string, unknown>, status = 200) {
   return Response.json(body, { status })
@@ -231,6 +239,38 @@ export async function POST(req: Request) {
         email: body.teacherEmail,
         role: 'teacher',
         school_id: targetSchoolId,
+        must_change_password: true,
+      })
+
+      if (profileError) {
+        await adminClient.auth.admin.deleteUser(newUser.user.id)
+        return json({ error: profileError.message }, 400)
+      }
+
+      return json({ success: true, userId: newUser.user.id })
+    }
+
+    if (body.action === 'create_essa_member') {
+      if (callerProfile.role !== 'essa_admin') {
+        return json({ error: 'Only ESSA admins can create ESSA members.' }, 403)
+      }
+
+      const { data: newUser, error: userError } = await adminClient.auth.admin.createUser({
+        email: body.memberEmail,
+        password: body.memberPassword,
+        email_confirm: true,
+      })
+
+      if (userError) {
+        return json({ error: userError.message }, 400)
+      }
+
+      const { error: profileError } = await adminClient.from('profiles').insert({
+        id: newUser.user.id,
+        full_name: body.memberName,
+        email: body.memberEmail,
+        phone: body.phone || '',
+        role: 'essa_admin',
         must_change_password: true,
       })
 

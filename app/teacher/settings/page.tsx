@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createClient } from '../../../lib/supabase/client'
 import Card from '../../../components/ui/Card'
 import Button from '../../../components/ui/Button'
@@ -10,10 +10,24 @@ import type { ToastMessage } from '../../../components/ui/Toast'
 import { Lock } from 'lucide-react'
 
 export default function TeacherSettingsPage() {
+  const [profile, setProfile] = useState<{ full_name: string; email: string; role: string; schools?: { name: string } | null } | null>(null)
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [toasts, setToasts] = useState<ToastMessage[]>([])
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (!data.user) return
+      const { data: row } = await supabase
+        .from('profiles')
+        .select('full_name, email, role, schools(name)')
+        .eq('id', data.user.id)
+        .maybeSingle()
+      setProfile(row ? { ...row, schools: Array.isArray(row.schools) ? row.schools[0] ?? null : row.schools } : null)
+    })
+  }, [])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -38,10 +52,21 @@ export default function TeacherSettingsPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6 max-w-md">
+    <div className="flex flex-col gap-6 max-w-2xl">
       <div>
         <h1 className="text-2xl font-bold text-slate-900">Account Settings</h1>
       </div>
+      {profile && (
+        <Card>
+          <h2 className="font-semibold text-slate-800 mb-3">Logged-in User</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+            <div><span className="text-slate-500">Name:</span> <span className="font-medium text-slate-900">{profile.full_name}</span></div>
+            <div><span className="text-slate-500">Email:</span> <span className="font-medium text-slate-900">{profile.email}</span></div>
+            <div><span className="text-slate-500">Role:</span> <span className="font-medium text-slate-900">{profile.role}</span></div>
+            <div><span className="text-slate-500">School:</span> <span className="font-medium text-slate-900">{profile.schools?.name ?? 'Not assigned'}</span></div>
+          </div>
+        </Card>
+      )}
       <Card>
         <div className="flex items-center gap-3 mb-4">
           <div className="p-2.5 bg-amber-100 rounded-xl">

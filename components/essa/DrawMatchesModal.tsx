@@ -57,6 +57,7 @@ export default function DrawMatchesModal({ draw, schools, onClose }: Props) {
       match_date: form.match_date,
       venue: form.venue,
       match_number: form.match_number ? parseInt(form.match_number) : null,
+      status: 'published',
     }).select().single()
     if (err) setError(err.message)
     else {
@@ -96,6 +97,7 @@ export default function DrawMatchesModal({ draw, schools, onClose }: Props) {
                       {format(new Date(m.match_date), 'dd MMM yyyy, HH:mm')}
                       {m.venue && ` · ${m.venue}`}
                       {m.match_number && ` · Match #${m.match_number}`}
+                      {' · Published'}
                     </div>
                   </div>
                   <button onClick={() => handleDelete(m.id)} className="text-red-400 hover:text-red-600 p-1">

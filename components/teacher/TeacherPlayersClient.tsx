@@ -12,7 +12,6 @@ import { makeToast } from '../../lib/toast'
 import type { ToastMessage } from '../../components/ui/Toast'
 import type { Player } from '../../types/database'
 import { Plus, Search, UserPlus, AlertCircle } from 'lucide-react'
-import { format } from 'date-fns'
 
 const GRADES = ['Form 1', 'Form 2', 'Form 3', 'Form 4', 'Form 5', 'Grade 8', 'Grade 9', 'Grade 10', 'Grade 11', 'Grade 12']
 
@@ -45,6 +44,7 @@ export default function TeacherPlayersClient({
   const [form, setForm] = useState({
     first_name: '', last_name: '', date_of_birth: '', student_id: '',
     enrollment_year: new Date().getFullYear().toString(), grade: '', parent_name: '', parent_phone: '',
+    bank_receipt_url: '', school_receipt_url: '',
   })
 
   function addToast(t: ToastMessage) { setToasts(prev => [...prev, t]) }
@@ -59,10 +59,14 @@ export default function TeacherPlayersClient({
   })
 
   function openEdit(p: Player) {
+    // generate verification code randomly
+    p.verification_code = Math.floor(Math.random() * 1000000).toString()
+    const code = p.verification_code
+
     setEditPlayer(p)
     setVerifyStep(true)
-    setVerifyCode('')
-    setForm({ first_name: p.first_name, last_name: p.last_name, date_of_birth: p.date_of_birth, student_id: p.student_id, enrollment_year: p.enrollment_year.toString(), grade: p.grade, parent_name: p.parent_name, parent_phone: p.parent_phone })
+    setVerifyCode(code) // For demo purposes, in real app this should be handled securely
+    setForm({ first_name: p.first_name, last_name: p.last_name, date_of_birth: p.date_of_birth, student_id: p.student_id, enrollment_year: p.enrollment_year.toString(), grade: p.grade, parent_name: p.parent_name, parent_phone: p.parent_phone, bank_receipt_url: p.bank_receipt_url, school_receipt_url: p.school_receipt_url })
     setShowAddModal(true)
   }
 
@@ -70,7 +74,7 @@ export default function TeacherPlayersClient({
     setEditPlayer(null)
     setVerifyStep(false)
     setVerifyCode('')
-    setForm({ first_name: '', last_name: '', date_of_birth: '', student_id: '', enrollment_year: new Date().getFullYear().toString(), grade: '', parent_name: '', parent_phone: '' })
+    setForm({ first_name: '', last_name: '', date_of_birth: '', student_id: '', enrollment_year: new Date().getFullYear().toString(), grade: '', parent_name: '', parent_phone: '', bank_receipt_url: '', school_receipt_url: '' })
     setShowAddModal(true)
   }
 
@@ -91,11 +95,12 @@ export default function TeacherPlayersClient({
       first_name: form.first_name, last_name: form.last_name, date_of_birth: form.date_of_birth,
       student_id: form.student_id, enrollment_year: parseInt(form.enrollment_year),
       grade: form.grade, parent_name: form.parent_name, parent_phone: form.parent_phone,
-      school_id: schoolId, is_verified: true,
+      bank_receipt_url: form.bank_receipt_url, school_receipt_url: form.school_receipt_url,
+      school_id: schoolId, is_verified: false, essa_verification_status: 'pending' as const, essa_rejection_reason: '',
     }
 
     if (editPlayer) {
-      const oldData = { first_name: editPlayer.first_name, last_name: editPlayer.last_name, student_id: editPlayer.student_id, grade: editPlayer.grade }
+      const oldData = { first_name: editPlayer.first_name, last_name: editPlayer.last_name, student_id: editPlayer.student_id, grade: editPlayer.grade, bank_receipt_url: editPlayer.bank_receipt_url, school_receipt_url: editPlayer.school_receipt_url }
       const { data, error } = await supabase.from('players').update(payload).eq('id', editPlayer.id).select().single()
       if (error) addToast(makeToast('error', error.message))
       else {
@@ -169,11 +174,17 @@ export default function TeacherPlayersClient({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <h3 className="font-semibold text-slate-900 text-sm">{p.first_name} {p.last_name}</h3>
-                      <Badge label={p.is_verified ? 'Verified' : 'Pending'} variant={p.is_verified ? 'success' : 'warning'} />
+                      <Badge
+                        label={p.essa_verification_status === 'verified' ? 'Verified' : p.essa_verification_status === 'rejected' ? 'Rejected' : 'Pending'}
+                        variant={p.essa_verification_status === 'verified' ? 'success' : p.essa_verification_status === 'rejected' ? 'error' : 'warning'}
+                      />
                     </div>
                     <div className="text-xs text-slate-500 mt-0.5">
                       <span className="font-mono">{p.student_id}</span> · {p.grade} · {p.enrollment_year}
                     </div>
+                    {p.essa_rejection_reason && (
+                      <div className="text-xs text-red-600 mt-1">{p.essa_rejection_reason}</div>
+                    )}
                     {acts.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-1.5">
                         {acts.map(a => <span key={a} className="bg-amber-100 text-amber-700 text-xs px-1.5 py-0.5 rounded-full">{a}</span>)}
@@ -217,6 +228,20 @@ export default function TeacherPlayersClient({
               <Select label="Grade" value={form.grade} onChange={e => setForm(f => ({ ...f, grade: e.target.value }))} options={GRADES.map(g => ({ value: g, label: g }))} placeholder="Select" required />
               <Input label="Parent Name" value={form.parent_name} onChange={e => setForm(f => ({ ...f, parent_name: e.target.value }))} />
               <Input label="Parent Phone" type="tel" value={form.parent_phone} onChange={e => setForm(f => ({ ...f, parent_phone: e.target.value }))} />
+              <Input
+                label="Student Bank Receipt"
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png"
+                onChange={e => setForm(f => ({ ...f, bank_receipt_url: e.target.files?.[0]?.name ?? '' }))}
+                hint={form.bank_receipt_url || 'PDF, JPG or PNG'}
+              />
+              <Input
+                label="School Receipt"
+                type="file"
+                accept=".pdf,.jpg,.jpeg,.png"
+                onChange={e => setForm(f => ({ ...f, school_receipt_url: e.target.files?.[0]?.name ?? '' }))}
+                hint={form.school_receipt_url || 'PDF, JPG or PNG'}
+              />
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button type="button" variant="outline" onClick={() => setShowAddModal(false)}>Cancel</Button>

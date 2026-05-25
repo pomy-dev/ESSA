@@ -83,11 +83,24 @@ export interface Database {
           id_document_url: string
           is_verified: boolean
           verification_code: string | null
+          bank_receipt_url: string
+          school_receipt_url: string
+          essa_verification_status: 'pending' | 'verified' | 'rejected'
+          essa_rejection_reason: string
+          essa_verified_by: string | null
+          essa_verified_at: string | null
           registered_by: string | null
           created_at: string
           updated_at: string
         }
-        Insert: Omit<Database['public']['Tables']['players']['Row'], 'id' | 'created_at' | 'updated_at'>
+        Insert: Omit<Database['public']['Tables']['players']['Row'], 'id' | 'created_at' | 'updated_at' | 'bank_receipt_url' | 'school_receipt_url' | 'essa_verification_status' | 'essa_rejection_reason' | 'essa_verified_by' | 'essa_verified_at'> & {
+          bank_receipt_url?: string
+          school_receipt_url?: string
+          essa_verification_status?: 'pending' | 'verified' | 'rejected'
+          essa_rejection_reason?: string
+          essa_verified_by?: string | null
+          essa_verified_at?: string | null
+        }
         Update: Partial<Database['public']['Tables']['players']['Insert']>
       }
       player_updates: {
@@ -123,11 +136,16 @@ export interface Database {
           season: string
           description: string
           is_published: boolean
+          starts_at: string | null
+          ends_at: string | null
           created_by: string | null
           created_at: string
           updated_at: string
         }
-        Insert: Omit<Database['public']['Tables']['draws']['Row'], 'id' | 'created_at' | 'updated_at'>
+        Insert: Omit<Database['public']['Tables']['draws']['Row'], 'id' | 'created_at' | 'updated_at' | 'starts_at' | 'ends_at'> & {
+          starts_at?: string | null
+          ends_at?: string | null
+        }
         Update: Partial<Database['public']['Tables']['draws']['Insert']>
       }
       draw_matches: {
@@ -139,10 +157,13 @@ export interface Database {
           match_date: string
           venue: string
           match_number: number | null
+          status: 'draft' | 'published' | 'completed' | 'cancelled'
           notes: string
           created_at: string
         }
-        Insert: Omit<Database['public']['Tables']['draw_matches']['Row'], 'id' | 'created_at'>
+        Insert: Omit<Database['public']['Tables']['draw_matches']['Row'], 'id' | 'created_at' | 'status'> & {
+          status?: 'draft' | 'published' | 'completed' | 'cancelled'
+        }
         Update: Partial<Database['public']['Tables']['draw_matches']['Insert']>
       }
       squads: {
@@ -182,11 +203,16 @@ export interface Database {
           content: string
           is_published: boolean
           target_schools: string[]
+          starts_at: string | null
+          expires_at: string | null
           created_by: string | null
           created_at: string
           updated_at: string
         }
-        Insert: Omit<Database['public']['Tables']['announcements']['Row'], 'id' | 'created_at' | 'updated_at'>
+        Insert: Omit<Database['public']['Tables']['announcements']['Row'], 'id' | 'created_at' | 'updated_at' | 'starts_at' | 'expires_at'> & {
+          starts_at?: string | null
+          expires_at?: string | null
+        }
         Update: Partial<Database['public']['Tables']['announcements']['Insert']>
       }
     }

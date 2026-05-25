@@ -42,7 +42,7 @@ export default function DrawsClient({ initialDraws, schools }: { initialDraws: D
   const [loading, setLoading] = useState(false)
 
   const [form, setForm] = useState({
-    title: '', sport: '', stage: '', season: new Date().getFullYear().toString(), description: '',
+    title: '', sport: '', stage: '', season: new Date().getFullYear().toString(), starts_at: '', ends_at: '', description: '',
   })
 
   function addToast(t: ToastMessage) { setToasts(prev => [...prev, t]) }
@@ -57,8 +57,10 @@ export default function DrawsClient({ initialDraws, schools }: { initialDraws: D
       sport: form.sport,
       stage: parseInt(form.stage) as 1 | 2 | 3,
       season: form.season,
+      starts_at: form.starts_at || null,
+      ends_at: form.ends_at || null,
       description: form.description,
-      is_published: false,
+      is_published: true,
       created_by: user!.id,
     }).select().single()
 
@@ -66,9 +68,9 @@ export default function DrawsClient({ initialDraws, schools }: { initialDraws: D
       addToast(makeToast('error', error.message))
     } else {
       setDraws(d => [data, ...d])
-      addToast(makeToast('success', 'Draw created successfully'))
+      addToast(makeToast('success', 'Draw created and published successfully'))
       setShowModal(false)
-      setForm({ title: '', sport: '', stage: '', season: new Date().getFullYear().toString(), description: '' })
+      setForm({ title: '', sport: '', stage: '', season: new Date().getFullYear().toString(), starts_at: '', ends_at: '', description: '' })
     }
     setLoading(false)
   }
@@ -148,6 +150,10 @@ export default function DrawsClient({ initialDraws, schools }: { initialDraws: D
             <Select label="Stage" value={form.stage} onChange={e => setForm(f => ({ ...f, stage: e.target.value }))} options={stageOptions} placeholder="Select stage" required />
           </div>
           <Input label="Season / Year" value={form.season} onChange={e => setForm(f => ({ ...f, season: e.target.value }))} required />
+          <div className="grid grid-cols-2 gap-3">
+            <Input label="Starts At" type="date" value={form.starts_at} onChange={e => setForm(f => ({ ...f, starts_at: e.target.value }))} />
+            <Input label="Ends At" type="date" value={form.ends_at} onChange={e => setForm(f => ({ ...f, ends_at: e.target.value }))} />
+          </div>
           <div className="flex flex-col gap-1">
             <label className="text-sm font-medium text-slate-700">Description</label>
             <textarea

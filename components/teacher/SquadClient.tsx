@@ -191,7 +191,7 @@ export default function SquadClient({
           <div className="flex flex-col gap-1">
             <label className="text-sm font-medium text-slate-700">Select Match</label>
             <select
-              className="px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-3 py-2 rounded-lg border border-slate-300 text-gray-700 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={selectedMatch?.id ?? ''}
               onChange={e => {
                 const m = matches.find(x => x.id === e.target.value) ?? null
@@ -323,7 +323,7 @@ export default function SquadClient({
           <Select
             label="Player"
             value={addForm.player_id}
-            onChange={e => setAddForm(f => ({...f, player_id: e.target.value}))}
+            onChange={e => setAddForm(f => ({ ...f, player_id: e.target.value }))}
             options={availablePlayers.map(p => ({ value: p.id, label: `${p.first_name} ${p.last_name} (${p.student_id}) - ${p.grade}` }))}
             placeholder="Select player"
             required
@@ -331,7 +331,7 @@ export default function SquadClient({
           <Select
             label="Position"
             value={addForm.position}
-            onChange={e => setAddForm(f => ({...f, position: e.target.value}))}
+            onChange={e => setAddForm(f => ({ ...f, position: e.target.value }))}
             options={posOptions()}
             placeholder="Select position"
             required
@@ -341,17 +341,17 @@ export default function SquadClient({
             <input
               type="number"
               value={addForm.jersey_number}
-              onChange={e => setAddForm(f => ({...f, jersey_number: e.target.value}))}
-              className="px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              onChange={e => setAddForm(f => ({ ...f, jersey_number: e.target.value }))}
+              className="px-3 py-2 rounded-lg border border-slate-300 text-gray-700 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               min={1}
               max={99}
             />
           </div>
-          <label className="flex items-center gap-2 text-sm cursor-pointer">
+          <label className="flex items-center gap-2 text-gray-700 text-sm cursor-pointer">
             <input
               type="checkbox"
               checked={addForm.is_captain}
-              onChange={e => setAddForm(f => ({...f, is_captain: e.target.checked}))}
+              onChange={e => setAddForm(f => ({ ...f, is_captain: e.target.checked }))}
             />
             <span>Captain</span>
           </label>

@@ -3,7 +3,7 @@ import { type ReactNode, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { createClient } from '../../lib/supabase/client'
-import { LogOut, Menu, X, Shield } from 'lucide-react'
+import { ChevronsLeft, ChevronsRight, LogOut, Menu, X, Shield } from 'lucide-react'
 
 interface NavItem {
   href: string
@@ -29,6 +29,7 @@ export default function DashboardLayout({
   const pathname = usePathname()
   const router = useRouter()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [collapsed, setCollapsed] = useState(false)
 
   async function handleSignOut() {
     const supabase = createClient()
@@ -36,7 +37,7 @@ export default function DashboardLayout({
     router.push('/login')
   }
 
-  const NavLinks = () => (
+  const renderNavLinks = (compact = collapsed) => (
     <>
       {navItems.map(item => {
         const active = pathname === item.href || pathname.startsWith(item.href + '/')
@@ -45,6 +46,7 @@ export default function DashboardLayout({
             key={item.href}
             href={item.href}
             onClick={() => setMobileOpen(false)}
+            title={compact ? item.label : undefined}
             className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all
               ${active
                 ? 'bg-white/15 text-white'
@@ -52,7 +54,7 @@ export default function DashboardLayout({
               }`}
           >
             {item.icon}
-            {item.label}
+            {!compact && item.label}
           </Link>
         )
       })}
@@ -62,26 +64,35 @@ export default function DashboardLayout({
   return (
     <div className="min-h-screen flex">
       {/* Sidebar - desktop */}
-      <aside className={`hidden lg:flex flex-col w-64 ${accentColor} shrink-0`}>
-        <div className="px-6 py-5 border-b border-white/20">
+      <aside className={`hidden lg:flex flex-col ${collapsed ? 'w-20' : 'w-64'} ${accentColor} shrink-0 transition-all duration-200`}>
+        <div className={`${collapsed ? 'px-3' : 'px-6'} py-5 border-b border-white/20`}>
           <div className="flex items-center gap-3">
             <Shield className="text-white" size={28} />
-            <div>
+            {!collapsed && <div>
               <div className="text-white font-bold text-lg leading-tight">{title}</div>
               <div className="text-white/60 text-xs">{subtitle}</div>
-            </div>
+            </div>}
           </div>
         </div>
         <nav className="flex-1 px-3 py-4 flex flex-col gap-1">
-          <NavLinks />
+          {renderNavLinks()}
         </nav>
         <div className="px-3 py-4 border-t border-white/20">
           <button
+            onClick={() => setCollapsed(v => !v)}
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-white/70 hover:bg-white/10 hover:text-white transition-all w-full mb-1"
+            title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {collapsed ? <ChevronsRight size={18} /> : <ChevronsLeft size={18} />}
+            {!collapsed && 'Collapse'}
+          </button>
+          <button
             onClick={handleSignOut}
             className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-white/70 hover:bg-white/10 hover:text-white transition-all w-full"
+            title={collapsed ? 'Sign Out' : undefined}
           >
             <LogOut size={18} />
-            Sign Out
+            {!collapsed && 'Sign Out'}
           </button>
         </div>
       </aside>
@@ -101,7 +112,7 @@ export default function DashboardLayout({
               </button>
             </div>
             <nav className="flex-1 px-3 py-4 flex flex-col gap-1">
-              <NavLinks />
+              {renderNavLinks(false)}
             </nav>
             <div className="px-3 py-4 border-t border-white/20">
               <button
