@@ -10,39 +10,52 @@ import { ToastContainer } from '../../components/ui/Toast'
 import { makeToast } from '../../lib/toast'
 import type { ToastMessage } from '../../components/ui/Toast'
 import { callEdgeFunction } from '../../lib/edge'
-import { Plus, School, Search } from 'lucide-react'
+import { Plus, School, Search, User } from 'lucide-react'
+import { useEffect } from 'react'
+
+interface PlayerPreview {
+  id: string
+  first_name: string
+  last_name: string
+  grade: string
+  student_id: string
+  date_of_birth: string
+}
+
 
 interface SchoolWithAdmin {
-  id: string
-  name: string
-  code: string
-  region: string
-  address: string
-  phone: string
-  email: string
-  admin_id: string | null
-  is_active: boolean
-  created_at: string
-  profiles?: { full_name: string; email: string } | null
+  id: string;
+  name: string;
+  code: string;
+  region: string;
+  address: string;
+  phone: string;
+  email: string;
+  is_active: boolean;
+  created_at: string;
+  profiles?: { full_name: string; email: string } | null;
+  players?: PlayerPreview[];
 }
 
 export default function SchoolsClient({ initialSchools }: { initialSchools: SchoolWithAdmin[] }) {
+
   const [schools, setSchools] = useState(initialSchools)
+  const [playerModal, setPlayerModal] = useState<{ open: boolean, player: PlayerPreview | null }>({ open: false, player: null })
   const [search, setSearch] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [toasts, setToasts] = useState<ToastMessage[]>([])
   const [loading, setLoading] = useState(false)
-
   const [form, setForm] = useState({
     schoolName: '', code: '', region: '', address: '', phone: '', email: '',
-    adminName: '', adminEmail: '', adminPassword: '',
+    adminName: '', adminEmail: '', adminPassword: ''
   })
 
-  const filtered = schools.filter(s =>
+  const filtered = schools.filter((s: SchoolWithAdmin) =>
     s.name.toLowerCase().includes(search.toLowerCase()) ||
     s.code.toLowerCase().includes(search.toLowerCase()) ||
     s.region.toLowerCase().includes(search.toLowerCase())
   )
+
 
   function addToast(t: ToastMessage) {
     setToasts(prev => [...prev, t])
@@ -74,8 +87,11 @@ export default function SchoolsClient({ initialSchools }: { initialSchools: Scho
     setShowModal(false)
     setForm({ schoolName: '', code: '', region: '', address: '', phone: '', email: '', adminName: '', adminEmail: '', adminPassword: '' })
 
-    // Refresh
-    const { data } = await supabase.from('schools').select('*, profiles!schools_admin_id_fkey(full_name, email)').order('name')
+    // Refresh, now also fetch players for each school
+    const { data } = await supabase
+      .from('schools')
+      .select('*, profiles!schools_admin_id_fkey(full_name, email), players(id, first_name, last_name, grade, student_id, date_of_birth)')
+      .order('name')
     setSchools(data ?? [])
     setLoading(false)
   }
@@ -104,7 +120,7 @@ export default function SchoolsClient({ initialSchools }: { initialSchools: Scho
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {filtered.map(school => (
+        {filtered.map((school: SchoolWithAdmin) => (
           <Card key={school.id}>
             <div className="flex items-start gap-3">
               <div className="p-2.5 bg-blue-100 rounded-lg shrink-0">
@@ -126,6 +142,25 @@ export default function SchoolsClient({ initialSchools }: { initialSchools: Scho
                     <div className="text-xs text-slate-400">{school.profiles.email}</div>
                   </div>
                 )}
+                {/* Player cards */}
+                {school.players && school.players.length > 0 && (
+                  <div className="mt-4">
+                    <div className="font-semibold text-xs text-slate-700 mb-2">Players</div>
+                    <div className="flex flex-wrap gap-2">
+                      {school.players.map((player: PlayerPreview) => (
+                        <div
+                          key={player.id}
+                          className="flex items-center gap-2 bg-slate-50 rounded-lg px-2 py-1 cursor-pointer hover:bg-blue-50 border border-slate-200"
+                          onClick={() => setPlayerModal({ open: true, player })}
+                        >
+                          <User size={16} className="text-blue-400" />
+                          <span className="text-xs font-medium text-slate-800">{player.first_name} {player.last_name}</span>
+                          <span className="text-xs text-slate-500">{player.grade}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </Card>
@@ -136,30 +171,46 @@ export default function SchoolsClient({ initialSchools }: { initialSchools: Scho
           </div>
         )}
       </div>
+      {/* Player profile modal */}
+      <Modal open={playerModal.open} onClose={() => setPlayerModal({ open: false, player: null })} title="Player Profile" size="md">
+        {playerModal.player && (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-3">
+              <User size={32} className="text-blue-500" />
+              <div>
+                <div className="font-semibold text-lg text-slate-900">{playerModal.player.first_name} {playerModal.player.last_name}</div>
+                <div className="text-xs text-slate-500">Grade: {playerModal.player.grade}</div>
+                <div className="text-xs text-slate-500">Student ID: {playerModal.player.student_id}</div>
+                <div className="text-xs text-slate-500">DOB: {playerModal.player.date_of_birth}</div>
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       <Modal open={showModal} onClose={() => setShowModal(false)} title="Register New School" size="lg">
         <form onSubmit={handleCreate} className="flex flex-col gap-4">
           <div className="grid grid-cols-2 gap-3">
             <div className="col-span-2">
-              <Input label="School Name" value={form.schoolName} onChange={e => setForm(f => ({...f, schoolName: e.target.value}))} required />
+              <Input label="School Name" value={form.schoolName} onChange={e => setForm(f => ({ ...f, schoolName: e.target.value }))} required />
             </div>
-            <Input label="School Code" value={form.code} onChange={e => setForm(f => ({...f, code: e.target.value.toUpperCase()}))} placeholder="e.g. SWZ001" required />
-            <Input label="Region" value={form.region} onChange={e => setForm(f => ({...f, region: e.target.value}))} placeholder="e.g. Hhohho" required />
+            <Input label="School Code" value={form.code} onChange={e => setForm(f => ({ ...f, code: e.target.value.toUpperCase() }))} placeholder="e.g. SWZ001" required />
+            <Input label="Region" value={form.region} onChange={e => setForm(f => ({ ...f, region: e.target.value }))} placeholder="e.g. Hhohho" required />
             <div className="col-span-2">
-              <Input label="Address" value={form.address} onChange={e => setForm(f => ({...f, address: e.target.value}))} />
+              <Input label="Address" value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} />
             </div>
-            <Input label="Phone" type="tel" value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))} />
-            <Input label="School Email" type="email" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} />
+            <Input label="Phone" type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} />
+            <Input label="School Email" type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
           </div>
 
           <div className="border-t border-slate-200 pt-4">
             <h3 className="font-semibold text-slate-700 mb-3 text-sm">School Administrator Account</h3>
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2">
-                <Input label="Admin Full Name" value={form.adminName} onChange={e => setForm(f => ({...f, adminName: e.target.value}))} required />
+                <Input label="Admin Full Name" value={form.adminName} onChange={e => setForm(f => ({ ...f, adminName: e.target.value }))} required />
               </div>
-              <Input label="Admin Email" type="email" value={form.adminEmail} onChange={e => setForm(f => ({...f, adminEmail: e.target.value}))} required />
-              <Input label="Temporary Password" type="password" value={form.adminPassword} onChange={e => setForm(f => ({...f, adminPassword: e.target.value}))} placeholder="Min. 8 characters" required />
+              <Input label="Admin Email" type="email" value={form.adminEmail} onChange={e => setForm(f => ({ ...f, adminEmail: e.target.value }))} required />
+              <Input label="Temporary Password" type="password" value={form.adminPassword} onChange={e => setForm(f => ({ ...f, adminPassword: e.target.value }))} placeholder="Min. 8 characters" required />
             </div>
             <p className="text-xs text-slate-400 mt-2">Admin will be prompted to change their password on first login.</p>
           </div>
@@ -173,5 +224,5 @@ export default function SchoolsClient({ initialSchools }: { initialSchools: Scho
 
       <ToastContainer toasts={toasts} onDismiss={id => setToasts(t => t.filter(x => x.id !== id))} />
     </div>
-  )
+  );
 }

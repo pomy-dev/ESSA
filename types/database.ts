@@ -7,6 +7,7 @@ export interface Database {
     Tables: {
       profiles: {
         Row: {
+          sport_activity_id: string
           id: string
           full_name: string
           email: string
@@ -55,6 +56,7 @@ export interface Database {
       }
       sport_activities: {
         Row: {
+          coach_id: string
           id: string
           school_id: string
           name: string
