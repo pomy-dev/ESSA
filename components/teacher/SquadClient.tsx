@@ -182,7 +182,7 @@ export default function SquadClient({
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Squad Selection</h1>
+        <h1 className="text-2xl font-bold text-slate-700">Squad Selection</h1>
         <p className="text-slate-500 mt-1">Select your team for an assigned draw match</p>
       </div>
 

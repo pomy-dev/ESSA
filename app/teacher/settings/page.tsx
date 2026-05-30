@@ -54,7 +54,7 @@ export default function TeacherSettingsPage() {
   return (
     <div className="flex flex-col gap-6 max-w-2xl">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">Account Settings</h1>
+        <h1 className="text-2xl font-bold text-slate-700">Account Settings</h1>
       </div>
       {profile && (
         <Card>

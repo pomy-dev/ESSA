@@ -43,8 +43,9 @@ export default function TeacherPlayersClient({
 
   const [form, setForm] = useState({
     first_name: '', last_name: '', date_of_birth: '', student_id: '',
-    enrollment_year: new Date().getFullYear().toString(), grade: '', parent_name: '', parent_phone: '',
-    bank_receipt_url: '', school_receipt_url: '',
+    enrollment_year: new Date().getFullYear().toString(), grade: '',
+    bank_receipt: null as File | null,
+    school_receipt: null as File | null,
   })
 
   function addToast(t: ToastMessage) { setToasts(prev => [...prev, t]) }
@@ -66,7 +67,13 @@ export default function TeacherPlayersClient({
     setEditPlayer(p)
     setVerifyStep(true)
     setVerifyCode(code) // For demo purposes, in real app this should be handled securely
-    setForm({ first_name: p.first_name, last_name: p.last_name, date_of_birth: p.date_of_birth, student_id: p.student_id, enrollment_year: p.enrollment_year.toString(), grade: p.grade, parent_name: p.parent_name, parent_phone: p.parent_phone, bank_receipt_url: p.bank_receipt_url, school_receipt_url: p.school_receipt_url })
+    setForm({
+      first_name: p.first_name, last_name: p.last_name,
+      date_of_birth: p.date_of_birth, student_id: p.student_id,
+      enrollment_year: p.enrollment_year.toString(), grade: p.grade,
+      bank_receipt: p.bank_receipt ? (p.bank_receipt as unknown as File) : null,
+      school_receipt: p.school_receipt ? (p.school_receipt as unknown as File) : null
+    })
     setShowAddModal(true)
   }
 
@@ -74,7 +81,11 @@ export default function TeacherPlayersClient({
     setEditPlayer(null)
     setVerifyStep(false)
     setVerifyCode('')
-    setForm({ first_name: '', last_name: '', date_of_birth: '', student_id: '', enrollment_year: new Date().getFullYear().toString(), grade: '', parent_name: '', parent_phone: '', bank_receipt_url: '', school_receipt_url: '' })
+    setForm({
+      first_name: '', last_name: '', date_of_birth: '',
+      student_id: '', enrollment_year: new Date().getFullYear().toString(),
+      grade: '', bank_receipt: null, school_receipt: null
+    })
     setShowAddModal(true)
   }
 
@@ -87,39 +98,105 @@ export default function TeacherPlayersClient({
     setVerifyStep(false)
   }
 
+  async function uploadDocument(
+    supabase: any,
+    file: File,
+    folder: string
+  ) {
+    const fileName = file.name.replace(/\s/g, '_') + `_${Date.now()}`
+
+    const filePath = `${folder}/${fileName}`
+
+    const { error: uploadError } = await supabase.storage
+      .from('Essa-Bucket/player-documents')
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: false,
+      })
+
+    if (uploadError) {
+      throw uploadError
+    }
+
+    const { data } = supabase.storage
+      .from('Essa-Bucket/player-documents')
+      .getPublicUrl(filePath)
+
+    return {
+      name: file.name,
+      url: data.publicUrl,
+      type: file.type,
+      size: file.size,
+    }
+  }
+
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
     const supabase = createClient()
-    const payload = {
-      first_name: form.first_name, last_name: form.last_name, date_of_birth: form.date_of_birth,
-      student_id: form.student_id, enrollment_year: parseInt(form.enrollment_year),
-      grade: form.grade, parent_name: form.parent_name, parent_phone: form.parent_phone,
-      bank_receipt_url: form.bank_receipt_url, school_receipt_url: form.school_receipt_url,
-      school_id: schoolId, is_verified: false, essa_verification_status: 'pending' as const, essa_rejection_reason: '',
-    }
 
-    if (editPlayer) {
-      const oldData = { first_name: editPlayer.first_name, last_name: editPlayer.last_name, student_id: editPlayer.student_id, grade: editPlayer.grade, bank_receipt_url: editPlayer.bank_receipt_url, school_receipt_url: editPlayer.school_receipt_url }
-      const { data, error } = await supabase.from('players').update(payload).eq('id', editPlayer.id).select().single()
-      if (error) addToast(makeToast('error', error.message))
-      else {
-        await supabase.from('player_updates').insert({ player_id: editPlayer.id, updated_by: currentUserId, update_reason: 'Updated by teacher', old_data: oldData, new_data: payload, verification_code_used: verifyCode })
-        setAllPlayers(prev => prev.map(p => p.id === editPlayer.id ? data : p))
-        addToast(makeToast('success', 'Player updated'))
-        setShowAddModal(false)
+    let bankReceiptData = null
+    let schoolReceiptData = null
+
+    try {
+      if (form.bank_receipt) {
+        bankReceiptData = await uploadDocument(
+          supabase,
+          form.bank_receipt,
+          'bank-receipts'
+        )
       }
-    } else {
-      const vCode = `ESSA-${schoolId.slice(0, 4).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`
-      const { data, error } = await supabase.from('players').insert({ ...payload, registered_by: currentUserId, verification_code: vCode }).select().single()
-      if (error) addToast(makeToast('error', error.message))
-      else {
-        setAllPlayers(prev => [...prev, data])
-        addToast(makeToast('success', `Player added. Verification code: ${vCode}`))
-        setShowAddModal(false)
+
+      if (form.school_receipt) {
+        schoolReceiptData = await uploadDocument(
+          supabase,
+          form.school_receipt,
+          'school-receipts'
+        )
       }
+
+      const payload = {
+        first_name: form.first_name,
+        last_name: form.last_name,
+        date_of_birth: form.date_of_birth,
+        student_id: form.student_id,
+        enrollment_year: parseInt(form.enrollment_year),
+        grade: form.grade,
+
+        bank_receipt: bankReceiptData,
+        school_receipt: schoolReceiptData,
+
+        school_id: schoolId,
+        is_verified: false,
+        essa_verification_status: 'pending' as const,
+        essa_rejection_reason: '',
+      }
+
+      if (editPlayer) {
+        const oldData = { first_name: editPlayer.first_name, last_name: editPlayer.last_name, student_id: editPlayer.student_id, grade: editPlayer.grade, bank_receipt_url: editPlayer.bank_receipt, school_receipt_url: editPlayer.school_receipt }
+        const { data, error } = await supabase.from('players').update(payload).eq('id', editPlayer.id).select().single()
+        if (error) addToast(makeToast('error', error.message))
+        else {
+          await supabase.from('player_updates').insert({ player_id: editPlayer.id, updated_by: currentUserId, update_reason: 'Updated by teacher', old_data: oldData, new_data: payload, verification_code_used: verifyCode })
+          setAllPlayers(prev => prev.map(p => p.id === editPlayer.id ? data : p))
+          addToast(makeToast('success', 'Player updated'))
+          setShowAddModal(false)
+        }
+      } else {
+        const vCode = `ESSA-${schoolId.slice(0, 4).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`
+        const { data, error } = await supabase.from('players').insert({ ...payload, registered_by: currentUserId, verification_code: vCode }).select().single()
+        if (error) addToast(makeToast('error', error.message))
+        else {
+          setAllPlayers(prev => [...prev, data])
+          addToast(makeToast('success', `Player added. Verification code: ${vCode}`))
+          setShowAddModal(false)
+        }
+      }
+    } catch (err: any) {
+      addToast(makeToast('error', err.message))
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   async function handleEnroll(e: React.FormEvent) {
@@ -139,11 +216,24 @@ export default function TeacherPlayersClient({
   const getPlayerActivities = (playerId: string) =>
     allEnrollments.filter(e => e.player_id === playerId).map(e => activities.find(a => a.id === e.activity_id)?.name).filter(Boolean)
 
+  function pickFile(
+    e: React.ChangeEvent<HTMLInputElement>,
+    field: 'bank_receipt' | 'school_receipt'
+  ) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setForm(prev => ({
+      ...prev,
+      [field]: file
+    }))
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Players</h1>
+          <h1 className="text-2xl font-bold text-slate-700">Players</h1>
           <p className="text-slate-500 mt-1">{allPlayers.length} players at school</p>
         </div>
         <div className="flex gap-2">
@@ -226,21 +316,21 @@ export default function TeacherPlayersClient({
               <Input label="Student ID" value={form.student_id} onChange={e => setForm(f => ({ ...f, student_id: e.target.value }))} required />
               <Input label="Enrollment Year" type="number" value={form.enrollment_year} onChange={e => setForm(f => ({ ...f, enrollment_year: e.target.value }))} required />
               <Select label="Grade" value={form.grade} onChange={e => setForm(f => ({ ...f, grade: e.target.value }))} options={GRADES.map(g => ({ value: g, label: g }))} placeholder="Select" required />
-              <Input label="Parent Name" value={form.parent_name} onChange={e => setForm(f => ({ ...f, parent_name: e.target.value }))} />
-              <Input label="Parent Phone" type="tel" value={form.parent_phone} onChange={e => setForm(f => ({ ...f, parent_phone: e.target.value }))} />
               <Input
                 label="Student Bank Receipt"
                 type="file"
                 accept=".pdf,.jpg,.jpeg,.png"
-                onChange={e => setForm(f => ({ ...f, bank_receipt_url: e.target.files?.[0]?.name ?? '' }))}
-                hint={form.bank_receipt_url || 'PDF, JPG or PNG'}
+                onChange={e => pickFile(e, 'bank_receipt')}
+                disabled={editPlayer ? editPlayer.essa_verification_status === 'verified' : false}
+                hint={form.bank_receipt?.name || 'PDF, JPG or PNG'}
               />
               <Input
                 label="School Receipt"
                 type="file"
                 accept=".pdf,.jpg,.jpeg,.png"
-                onChange={e => setForm(f => ({ ...f, school_receipt_url: e.target.files?.[0]?.name ?? '' }))}
-                hint={form.school_receipt_url || 'PDF, JPG or PNG'}
+                onChange={e => pickFile(e, 'school_receipt')}
+                disabled={editPlayer ? editPlayer.essa_verification_status === 'verified' : false}
+                hint={form.school_receipt?.name || 'PDF, JPG or PNG'}
               />
             </div>
             <div className="flex justify-end gap-2 pt-2">

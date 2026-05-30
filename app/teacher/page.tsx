@@ -36,7 +36,7 @@ export default async function TeacherDashboard() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">My Activities</h1>
+        <h1 className="text-2xl font-bold text-slate-700">My Activities</h1>
         <p className="text-slate-500 mt-1">
           {profile?.full_name} · {school?.name ?? 'Unknown School'} · {school?.code}
         </p>

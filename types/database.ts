@@ -79,14 +79,14 @@ export interface Database {
           student_id: string
           enrollment_year: number
           grade: string
-          parent_name: string
-          parent_phone: string
           photo_url: string
           id_document_url: string
           is_verified: boolean
           verification_code: string | null
-          bank_receipt_url: string
-          school_receipt_url: string
+          bank_receipt: {}
+          school_receipt: {}
+          bank_receipt_name: string
+          school_receipt_name: string
           essa_verification_status: 'pending' | 'verified' | 'rejected'
           essa_rejection_reason: string
           essa_verified_by: string | null
