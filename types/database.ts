@@ -83,8 +83,8 @@ export interface Database {
           id_document_url: string
           is_verified: boolean
           verification_code: string | null
-          bank_receipt: {}
-          school_receipt: {}
+          bank_receipt: { name: string; url: string, type: string, size: number } | null
+          school_receipt: { name: string; url: string, type: string, size: number }
           bank_receipt_name: string
           school_receipt_name: string
           essa_verification_status: 'pending' | 'verified' | 'rejected'

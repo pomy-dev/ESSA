@@ -20,6 +20,7 @@ export default async function EssaWorkbenchPage({
     matchesRes,
     squadsRes,
     squadPlayersRes,
+    enrollmentsRes,
     announcementsRes,
     updatesRes,
   ] = await Promise.all([
@@ -39,6 +40,7 @@ export default async function EssaWorkbenchPage({
       .order('match_date', { ascending: false }),
     supabase.from('squads').select('*, profiles!squads_selected_by_fkey(full_name)').order('created_at', { ascending: false }),
     supabase.from('squad_players').select('*, players(id, first_name, last_name, student_id, grade, essa_verification_status)').order('jersey_number'),
+    supabase.from('player_activity').select('player_id, activity_id'),
     supabase.from('announcements').select('*').order('created_at', { ascending: false }),
     supabase
       .from('player_updates')
@@ -66,6 +68,7 @@ export default async function EssaWorkbenchPage({
       matches={matchesRes.data ?? []}
       squads={squadsRes.data ?? []}
       squadPlayers={squadPlayersRes.data ?? []}
+      playerActivityEnrollments={enrollmentsRes.data ?? []}
       announcements={announcementsRes.data ?? []}
       updates={updatesRes.data ?? []}
       championSchool={championSchool}

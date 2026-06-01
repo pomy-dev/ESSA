@@ -47,7 +47,7 @@ export default async function SchoolDashboard() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">{school?.name}</h1>
+        <h1 className="text-2xl font-bold text-slate-700">{school?.name}</h1>
         <p className="text-slate-500 mt-1">Welcome, {profile?.full_name} · {school?.region} · Code: {school?.code}</p>
       </div>
 

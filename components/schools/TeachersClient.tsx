@@ -56,7 +56,7 @@ export default function TeachersClient({ initialTeachers, schoolId }: { initialT
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Sport Teachers</h1>
+          <h1 className="text-2xl font-bold text-slate-700">Sport Teachers</h1>
           <p className="text-slate-500 mt-1">{teachers.length} teachers at your school</p>
         </div>
         <Button onClick={() => setShowModal(true)}><Plus size={16} /> Add Teacher</Button>

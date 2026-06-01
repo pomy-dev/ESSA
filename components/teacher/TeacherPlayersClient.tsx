@@ -1,4 +1,5 @@
 'use client'
+
 import { useState } from 'react'
 import { createClient } from '../../lib/supabase/client'
 import Card from '../../components/ui/Card'
@@ -87,6 +88,12 @@ export default function TeacherPlayersClient({
       grade: '', bank_receipt: null, school_receipt: null
     })
     setShowAddModal(true)
+  }
+
+  function openEnroll() {
+    setEnrollActivityId('')
+    setEnrollPlayerId('')
+    setShowEnrollModal(true)
   }
 
   async function handleVerifyCode() {
@@ -201,6 +208,11 @@ export default function TeacherPlayersClient({
 
   async function handleEnroll(e: React.FormEvent) {
     e.preventDefault()
+    if (allEnrollments.some(e => e.player_id === enrollPlayerId && e.activity_id === enrollActivityId)) {
+      addToast(makeToast('error', 'Player already enrolled in this activity'))
+      return
+    }
+
     setLoading(true)
     const supabase = createClient()
     const { error } = await supabase.from('player_activity').insert({ player_id: enrollPlayerId, activity_id: enrollActivityId })
@@ -215,6 +227,22 @@ export default function TeacherPlayersClient({
 
   const getPlayerActivities = (playerId: string) =>
     allEnrollments.filter(e => e.player_id === playerId).map(e => activities.find(a => a.id === e.activity_id)?.name).filter(Boolean)
+
+  const enrolledPlayerIdsForActivity = new Set(
+    allEnrollments.filter(e => e.activity_id === enrollActivityId).map(e => e.player_id)
+  )
+  const availablePlayersForEnrollment = enrollActivityId
+    ? allPlayers.filter(p => !enrolledPlayerIdsForActivity.has(p.id))
+    : []
+  const enrollmentPlayerOptions = availablePlayersForEnrollment.map(p => ({
+    value: p.id,
+    label: `${p.first_name} ${p.last_name} (${p.student_id})`
+  }))
+
+  function handleEnrollActivityChange(activityId: string) {
+    setEnrollActivityId(activityId)
+    setEnrollPlayerId('')
+  }
 
   function pickFile(
     e: React.ChangeEvent<HTMLInputElement>,
@@ -237,7 +265,7 @@ export default function TeacherPlayersClient({
           <p className="text-slate-500 mt-1">{allPlayers.length} players at school</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setShowEnrollModal(true)}><UserPlus size={16} /> Enroll in Activity</Button>
+          <Button variant="outline" onClick={openEnroll}><UserPlus size={16} /> Enroll in Activity</Button>
           <Button onClick={openCreate}><Plus size={16} /> Add Player</Button>
         </div>
       </div>
@@ -345,24 +373,30 @@ export default function TeacherPlayersClient({
       <Modal open={showEnrollModal} onClose={() => setShowEnrollModal(false)} title="Enroll Player in Activity">
         <form onSubmit={handleEnroll} className="flex flex-col gap-4">
           <Select
-            label="Player"
-            value={enrollPlayerId}
-            onChange={e => setEnrollPlayerId(e.target.value)}
-            options={allPlayers.map(p => ({ value: p.id, label: `${p.first_name} ${p.last_name} (${p.student_id})` }))}
-            placeholder="Select player"
-            required
-          />
-          <Select
             label="Activity"
             value={enrollActivityId}
-            onChange={e => setEnrollActivityId(e.target.value)}
+            onChange={e => handleEnrollActivityChange(e.target.value)}
             options={activityOptions}
             placeholder="Select activity"
             required
           />
+          <Select
+            label="Player"
+            value={enrollPlayerId}
+            onChange={e => setEnrollPlayerId(e.target.value)}
+            options={enrollmentPlayerOptions}
+            placeholder={enrollActivityId ? 'Select unenrolled player' : 'Select activity first'}
+            disabled={!enrollActivityId || enrollmentPlayerOptions.length === 0}
+            required
+          />
+          {enrollActivityId && enrollmentPlayerOptions.length === 0 && (
+            <div className="text-sm text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+              All players are already enrolled in this activity.
+            </div>
+          )}
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" onClick={() => setShowEnrollModal(false)}>Cancel</Button>
-            <Button type="submit" loading={loading}>Enroll</Button>
+            <Button type="submit" loading={loading} disabled={!enrollActivityId || !enrollPlayerId}>Enroll</Button>
           </div>
         </form>
       </Modal>

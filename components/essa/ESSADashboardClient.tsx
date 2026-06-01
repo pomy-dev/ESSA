@@ -1,4 +1,5 @@
 'use client'
+
 import { useMemo, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { createClient } from '../../lib/supabase/client'
@@ -12,7 +13,7 @@ import type { ToastMessage } from '../ui/Toast'
 import { callEdgeFunction } from '../../lib/edge'
 import {
   Activity, Search,
-  CalendarDays,
+  CalendarDays, Link, Link2,
   CheckCircle,
   ChevronDown,
   ChevronRight,
@@ -68,6 +69,11 @@ type SquadPlayerRow = {
   players?: Pick<Player, 'id' | 'first_name' | 'last_name' | 'student_id' | 'grade' | 'essa_verification_status'> | null
 }
 
+type PlayerActivityEnrollment = {
+  player_id: string
+  activity_id: string
+}
+
 type PlayerWithSchool = Player & { schools?: { name: string; code: string; } | null, sport_activity_id?: string | null }
 type UpdateRow = {
   id: string
@@ -95,6 +101,7 @@ interface Props {
   })[]
   squads: SquadRow[]
   squadPlayers: SquadPlayerRow[]
+  playerActivityEnrollments: PlayerActivityEnrollment[]
   announcements: Announcement[]
   updates: UpdateRow[]
   championSchool: string
@@ -139,7 +146,7 @@ function roleLabel(role: Profile['role']) {
 function statusBadge(status: Player['essa_verification_status']) {
   if (status === 'verified') return <Badge label="Verified" variant="success" />
   if (status === 'rejected') return <Badge label="Rejected" variant="error" />
-  return <Badge label="Pending ESSA" variant="warning" />
+  return <Badge label="Pending" variant="warning" />
 }
 
 export default function ESSADashboardClient(props: Props) {
@@ -429,6 +436,7 @@ export default function ESSADashboardClient(props: Props) {
                 activities={props.activities.filter(a => a.school_id === s.id)}
                 profiles={profiles.filter(p => p.school_id === s.id)}
                 players={players.filter(p => p.school_id === s.id)}
+                playerActivityEnrollments={props.playerActivityEnrollments}
                 onViewPlayer={(player) => {
                   setSelectedPlayer(player)
                   setPlayerModalOpen(true)
@@ -475,13 +483,13 @@ export default function ESSADashboardClient(props: Props) {
                     placeholder="Search by name or student ID..."
                     value={playerSearch}
                     onChange={e => setPlayerSearch(e.target.value)}
-                    className="w-full pl-7 pr-2 py-1.5 text-xs rounded border border-slate-200"
+                    className="w-full pl-7 pr-2 py-1.5 text-slate-700 text-xs rounded border border-slate-200"
                   />
                 </div>
                 <select
                   value={playerFilterSchool}
                   onChange={e => setPlayerFilterSchool(e.target.value)}
-                  className="w-full px-2 py-1.5 text-xs rounded border border-slate-200"
+                  className="w-full px-2 py-1.5 text-xs text-slate-700 rounded border border-slate-200"
                 >
                   <option value="all">All Schools</option>
                   {props.schools.map(s => (
@@ -491,7 +499,7 @@ export default function ESSADashboardClient(props: Props) {
                 <select
                   value={playerFilterStatus}
                   onChange={e => setPlayerFilterStatus(e.target.value)}
-                  className="w-full px-2 py-1.5 text-xs rounded border border-slate-200"
+                  className="w-full px-2 py-1.5 text-xs text-slate-700 rounded border border-slate-200"
                 >
                   <option value="all">All Status</option>
                   <option value="pending">Pending</option>
@@ -516,7 +524,7 @@ export default function ESSADashboardClient(props: Props) {
                 <select
                   value={updateFilterSchool}
                   onChange={e => setUpdateFilterSchool(e.target.value)}
-                  className="w-full px-2 py-1.5 text-xs rounded border border-slate-200"
+                  className="w-full px-2 py-1.5  text-slate-700 text-xs rounded border border-slate-200 placeholder:text-slate-400"
                 >
                   <option value="all">All Schools</option>
                   {props.schools.map(s => (
@@ -527,7 +535,7 @@ export default function ESSADashboardClient(props: Props) {
                   type="date"
                   value={updateFilterDate}
                   onChange={e => setUpdateFilterDate(e.target.value)}
-                  className="w-full px-2 py-1.5 text-xs rounded border border-slate-200"
+                  className="w-full px-2 py-1.5 text-slate-700 text-xs rounded border border-slate-200"
                 />
                 <div className="text-xs text-slate-500 mt-1">{filteredUpdates.length} updates</div>
               </div>
@@ -552,6 +560,7 @@ export default function ESSADashboardClient(props: Props) {
               activities={props.activities}
               profiles={profiles}
               players={players}
+              playerActivityEnrollments={props.playerActivityEnrollments}
               coachAssignments={coachAssignments}
               onViewPlayer={(player) => {
                 setSelectedPlayer(player)
@@ -863,7 +872,7 @@ function ListButton({ active, onClick, title, meta }: { active: boolean; onClick
   )
 }
 
-function SchoolListItem({ school, active, expanded, onSelect, onToggle, activities, profiles, players, onViewPlayer }: {
+function SchoolListItem({ school, active, expanded, onSelect, onToggle, activities, profiles, players, playerActivityEnrollments, onViewPlayer }: {
   school: SchoolRow
   active: boolean
   expanded: boolean
@@ -872,9 +881,16 @@ function SchoolListItem({ school, active, expanded, onSelect, onToggle, activiti
   activities: SportActivity[]
   profiles: Profile[]
   players: PlayerWithSchool[]
+  playerActivityEnrollments: PlayerActivityEnrollment[]
   onViewPlayer: (player: PlayerPreview) => void
 }) {
   const admin = profiles.find(p => p.role === 'school_admin')
+  const coaches = profiles.filter(p => p.role !== 'school_admin')
+  const schoolPlayerIds = new Set(players.map(p => p.id))
+
+  function getActivityPlayerCount(activityId: string) {
+    return playerActivityEnrollments.filter(e => e.activity_id === activityId && schoolPlayerIds.has(e.player_id)).length
+  }
 
   return (
     <div className={`rounded-md ${active ? 'bg-blue-50 ring-1 ring-blue-200' : 'hover:bg-slate-50'}`}>
@@ -900,14 +916,22 @@ function SchoolListItem({ school, active, expanded, onSelect, onToggle, activiti
           </div>
           <div>
             <div className="font-semibold text-slate-700 mb-1">Sports / Activities</div>
-            <div className="grid grid-cols-2 gap-1">
-              {activities.map(a => <div key={a.id}>{a.name}</div>)}
+            <div className="grid grid-cols-1 gap-1">
+              {activities.map(a => {
+                const coach = coaches.find(p => p.id === a.teacher_id)
+                return (
+                  <div key={a.id}>
+                    <span>{a.name}</span>
+                    <span className="text-slate-400"> - {coach?.full_name ?? 'No teacher assigned'} - {getActivityPlayerCount(a.id)} players</span>
+                  </div>
+                )
+              })}
             </div>
             {activities.length === 0 && <div>No activities listed</div>}
           </div>
           <div>
             <div className="font-semibold text-slate-700 mb-1">Coaches / Teachers</div>
-            {profiles.filter(p => p.role !== 'school_admin').map(p => (
+            {coaches.map(p => (
               <div key={p.id}>{p.full_name} ({roleLabel(p.role)})</div>
             ))}
           </div>
@@ -937,142 +961,12 @@ function SchoolListItem({ school, active, expanded, onSelect, onToggle, activiti
   )
 }
 
-// function SchoolDetail({ school, activities, profiles, players, coachAssignments, onViewPlayer }: {
-//   school: SchoolRow
-//   activities: SportActivity[]
-//   profiles: Profile[]
-//   players: PlayerWithSchool[]
-//   coachAssignments: CoachAssignment[]
-//   onViewPlayer: (player: PlayerPreview) => void
-// }) {
-//   const schoolActivities = activities.filter(a => a.school_id === school.id)
-//   const schoolProfiles = profiles.filter(p => p.school_id === school.id)
-//   const admin = schoolProfiles.find(p => p.role === 'school_admin')
-//   const coaches = schoolProfiles.filter(p => p.role !== 'school_admin')
-
-//   // Create a map of activity to coach
-//   const activityCoachMap = new Map()
-//   coachAssignments.forEach(assignment => {
-//     const coach = coaches.find(c => c.id === assignment.profile_id)
-//     if (coach) {
-//       activityCoachMap.set(assignment.sport_activity_id, coach)
-//     }
-//   })
-
-//   const activitiesWithCoaches = schoolActivities.map(activity => ({
-//     ...activity,
-//     coach: activityCoachMap.get(activity.id) || null
-//   }))
-
-//   return (
-//     <div className="flex flex-col gap-6">
-//       <Header title={school.name} subtitle={`${school.code} - ${school.region}`} />
-
-//       <div className="grid grid-cols-3 gap-3">
-//         <Stat label="Activities" value={schoolActivities.length} />
-//         <Stat label="Coaches / Teachers" value={coaches.length} />
-//         <Stat label="Total Players" value={players.length} />
-//       </div>
-
-//       {/* School Admin Section */}
-//       <Section title="School Administrator">
-//         {admin ? (
-//           <div className="bg-slate-50 rounded-lg p-4">
-//             <div className="flex items-center gap-3">
-//               <div className="p-2 bg-blue-100 rounded-full">
-//                 <User size={20} className="text-blue-600" />
-//               </div>
-//               <div>
-//                 <div className="font-semibold text-slate-900">{admin.full_name}</div>
-//                 <div className="text-sm text-slate-500">{admin.email}</div>
-//                 {admin.phone && <div className="text-sm text-slate-500">{admin.phone}</div>}
-//               </div>
-//             </div>
-//           </div>
-//         ) : (
-//           <div className="text-slate-500">No administrator assigned</div>
-//         )}
-//       </Section>
-
-//       {/* Sports/Activities Table */}
-//       <Section title="Sports & Activities">
-//         <table className="w-full text-sm">
-//           <thead className="bg-slate-50">
-//             <tr>
-//               <th className="text-left p-2 font-medium text-slate-700">Sport/Activity</th>
-//               <th className="text-left p-2 font-medium text-slate-700">Category</th>
-//               <th className="text-left p-2 font-medium text-slate-700">Players</th>
-//             </tr>
-//           </thead>
-//           <tbody>
-//             {schoolActivities.map(a => (
-//               <tr key={a.id} className="border-b border-slate-100">
-//                 <td className="p-2">{a.name}</td>
-//                 <td className="p-2">{a.category || '-'}</td>
-//                 <td className="p-2">{players.filter(p => p.sport_activity_id === a.id).length || 0}</td>
-//               </tr>
-//             ))}
-//           </tbody>
-//         </table>
-//         {schoolActivities.length === 0 && <div className="text-slate-500">No activities registered</div>}
-//       </Section>
-
-//       {/* Coaches/Teachers Table */}
-//       <Section title="Coaches & Teachers">
-//         <table className="w-full text-sm">
-//           <thead className="bg-slate-50">
-//             <tr>
-//               <th className="text-left p-2 font-medium text-slate-700">Name</th>
-//               <th className="text-left p-2 font-medium text-slate-700">Role</th>
-//               <th className="text-left p-2 font-medium text-slate-700">Email</th>
-//               <th className="text-left p-2 font-medium text-slate-700">Phone</th>
-//             </tr>
-//           </thead>
-//           <tbody>
-//             {coaches.map(p => (
-//               <tr key={p.id} className="border-b border-slate-100">
-//                 <td className="p-2">{p.full_name}</td>
-//                 <td className="p-2">{roleLabel(p.role)}</td>
-//                 <td className="p-2">{p.email}</td>
-//                 <td className="p-2">{p.phone || '-'}</td>
-//               </tr>
-//             ))}
-//           </tbody>
-//         </table>
-//         {coaches.length === 0 && <div className="text-slate-500">No coaches or teachers assigned</div>}
-//       </Section>
-
-//       {/* Players Cards */}
-//       <Section title="Players">
-//         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-//           {players.map(player => (
-//             <button
-//               key={player.id}
-//               onClick={() => onViewPlayer(player)}
-//               className="text-left p-3 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
-//             >
-//               <div className="flex items-start justify-between">
-//                 <div>
-//                   <div className="font-semibold text-slate-900">{player.first_name} {player.last_name}</div>
-//                   <div className="text-xs text-slate-500 mt-1">Grade: {player.grade}</div>
-//                   <div className="text-xs text-slate-500">Student ID: {player.student_id}</div>
-//                 </div>
-//                 {statusBadge(player.essa_verification_status)}
-//               </div>
-//             </button>
-//           ))}
-//         </div>
-//         {players.length === 0 && <div className="text-slate-500">No players registered</div>}
-//       </Section>
-//     </div>
-//   )
-// }
-
-function SchoolDetail({ school, activities, profiles, players, coachAssignments, onViewPlayer }: {
+function SchoolDetail({ school, activities, profiles, players, playerActivityEnrollments, coachAssignments, onViewPlayer }: {
   school: SchoolRow
   activities: SportActivity[]
   profiles: Profile[]
   players: PlayerWithSchool[]
+  playerActivityEnrollments: PlayerActivityEnrollment[]
   coachAssignments: CoachAssignment[]
   onViewPlayer: (player: PlayerPreview) => void
 }) {
@@ -1080,8 +974,14 @@ function SchoolDetail({ school, activities, profiles, players, coachAssignments,
   const schoolProfiles = profiles.filter(p => p.school_id === school.id)
   const admin = schoolProfiles.find(p => p.role === 'school_admin')
   const coaches = schoolProfiles.filter(p => p.role !== 'school_admin')
+  const schoolPlayers = players.filter(p => p.school_id === school.id)
+  const schoolPlayerIds = new Set(schoolPlayers.map(p => p.id))
 
-  const activityCoachMap = new Map()
+  function getActivityPlayerCount(activityId: string) {
+    return playerActivityEnrollments.filter(e => e.activity_id === activityId && schoolPlayerIds.has(e.player_id)).length
+  }
+
+  const activityCoachMap = new Map<string, Profile>()
   coachAssignments.forEach(assignment => {
     const coach = coaches.find(c => c.id === assignment.profile_id)
     if (coach) {
@@ -1091,7 +991,7 @@ function SchoolDetail({ school, activities, profiles, players, coachAssignments,
 
   const activitiesWithCoaches = schoolActivities.map(activity => ({
     ...activity,
-    coach: activityCoachMap.get(activity.id) || null
+    coach: coaches.find(coach => coach.id === activity.teacher_id) || activityCoachMap.get(activity.id) || null
   }))
 
   return (
@@ -1101,11 +1001,11 @@ function SchoolDetail({ school, activities, profiles, players, coachAssignments,
       <div className="grid grid-cols-3 gap-3">
         <Stat label="Activities" value={schoolActivities.length} />
         <Stat label="Coaches / Teachers" value={coaches.length} />
-        <Stat label="Total Players" value={players.length} />
+        <Stat label="Total Players" value={schoolPlayers.length} />
       </div>
 
       {/* School Admin Section */}
-      <Section title="School Administrator">
+      <Section Icon={User} title="School Administrator">
         {admin ? (
           <div className="bg-slate-50 rounded-lg p-4">
             <div className="flex items-center gap-3">
@@ -1125,7 +1025,7 @@ function SchoolDetail({ school, activities, profiles, players, coachAssignments,
       </Section>
 
       {/* Sports/Activities Table with Coach Assignment */}
-      <Section title="Sports & Activities">
+      <Section Icon={Activity} title="Sports & Activities">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-slate-50">
@@ -1153,7 +1053,7 @@ function SchoolDetail({ school, activities, profiles, players, coachAssignments,
                   </td>
                   <td className="p-3">
                     <span className="inline-flex items-center justify-center px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700">
-                      {players.filter(p => p.sport_activity_id === activity.id).length}
+                      {getActivityPlayerCount(activity.id)}
                     </span>
                   </td>
                 </tr>
@@ -1169,9 +1069,9 @@ function SchoolDetail({ school, activities, profiles, players, coachAssignments,
       </Section>
 
       {/* Players Cards */}
-      <Section title="Players">
+      <Section Icon={Users} title="Players">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {players.map(player => (
+          {schoolPlayers.map(player => (
             <button
               key={player.id}
               onClick={() => onViewPlayer(player)}
@@ -1180,8 +1080,8 @@ function SchoolDetail({ school, activities, profiles, players, coachAssignments,
               <div className="flex items-start justify-between">
                 <div className="flex-1">
                   <div className="font-semibold text-slate-900">{player.first_name} {player.last_name}</div>
-                  <div className="text-xs text-slate-500 mt-1 flex items-center gap-2">
-                    <span>{player.grade}</span>
+                  <div className="text-xs text-slate-500 mt-1 flex items-start gap-2">
+                    <span className='flex'>{player.grade}</span>
                     <span>•</span>
                     <span>{player.student_id}</span>
                   </div>
@@ -1198,7 +1098,7 @@ function SchoolDetail({ school, activities, profiles, players, coachAssignments,
             </button>
           ))}
         </div>
-        {players.length === 0 && (
+        {schoolPlayers.length === 0 && (
           <div className="text-center py-8 text-slate-500 bg-slate-50 rounded-lg">
             No players registered for this school
           </div>
@@ -1207,34 +1107,6 @@ function SchoolDetail({ school, activities, profiles, players, coachAssignments,
     </div>
   )
 }
-
-// function SchoolDetail({ school, activities, profiles, players, coachAssignments, onViewPlayer }: {
-//   school: SchoolRow
-//   activities: SportActivity[]
-//   profiles: Profile[]
-//   players: PlayerWithSchool[]
-//   coachAssignments: CoachAssignment[]
-//   onViewPlayer: (player: PlayerPreview) => void
-// }) {
-//   const schoolActivities = activities.filter(a => a.school_id === school.id)
-//   const schoolProfiles = profiles.filter(p => p.school_id === school.id)
-//   const admin = schoolProfiles.find(p => p.role === 'school_admin')
-//   const coaches = schoolProfiles.filter(p => p.role !== 'school_admin')
-
-//   // Create a map of activity to coach
-//   const activityCoachMap = new Map()
-//   coachAssignments.forEach(assignment => {
-//     const coach = coaches.find(c => c.id === assignment.profile_id)
-//     if (coach) {
-//       activityCoachMap.set(assignment.sport_activity_id, coach)
-//     }
-//   })
-
-//   const activitiesWithCoaches = schoolActivities.map(activity => ({
-//     ...activity,
-//     coach: activityCoachMap.get(activity.id) || null
-//   }))
-// }
 
 function MemberDetail({ profile, schools, onSave }: { profile: Profile; schools: SchoolRow[]; onSave: (profile: Profile, patch: Partial<Profile>) => void }) {
   const [form, setForm] = useState({ full_name: profile.full_name, email: profile.email, phone: profile.phone })
@@ -1267,7 +1139,7 @@ function MatchDetail({ match, squads, squadPlayers, schools, draws, onDeleteDraw
       <Header title={`${match.home_school?.name ?? 'Home'} vs ${match.away_school?.name ?? 'Away'}`} subtitle={`${match.draws?.title ?? ''} - ${match.status}`} />
       <div className="text-sm text-slate-600">{format(new Date(match.match_date), 'EEEE, dd MMMM yyyy HH:mm')} {match.venue && `- ${match.venue}`}</div>
       {draw?.ends_at && isPast(new Date(draw.ends_at)) && <Button variant="danger" className="w-fit" onClick={() => onDeleteDraw(draw)}>Delete Expired Draw</Button>}
-      <Section title="Finalized Squads">
+      <Section Icon={ShieldCheck} title="Finalized Squads">
         {matchSquads.map(squad => {
           const school = schools.find(s => s.id === squad.school_id)
           const players = squadPlayers.filter(sp => sp.squad_id === squad.id)
@@ -1313,9 +1185,8 @@ function PlayerDetail({ player, onVerify, onReject }: { player: PlayerWithSchool
         <Info label="Grade" value={player.grade} />
         <Info label="Enrollment Year" value={String(player.enrollment_year)} />
         <Info label="Date of Birth" value={format(new Date(player.date_of_birth), 'dd MMM yyyy')} />
-        <Info label="Parent" value={`${player.parent_name || 'Not set'} ${player.parent_phone || ''}`} />
-        <Info label="Bank Receipt" value={player.bank_receipt_url || 'Not entered'} />
-        <Info label="School Receipt" value={player.school_receipt_url || 'Not entered'} />
+        {player.bank_receipt && <Info label="Bank Receipt" value={player.bank_receipt} />}
+        {player.school_receipt && <Info label="School Receipt" value={player.school_receipt} />}
         {player.essa_rejection_reason && <Info label="Rejection Reason" value={player.essa_rejection_reason} />}
       </div>
       <div className="flex gap-2">
@@ -1391,20 +1262,27 @@ function Header({ title, subtitle }: { title: string; subtitle: string }) {
   )
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function Section({ Icon, title, children }: { Icon?: React.ComponentType<{ size: number }>; title: string; children: ReactNode }) {
   return (
     <section>
-      <h2 className="font-semibold text-slate-800 mb-3 flex items-center gap-2"><Activity size={16} /> {title}</h2>
+      <h2 className="font-semibold text-slate-800 mb-3 flex items-center gap-2">
+        {Icon && <Icon size={16} />} {title}
+      </h2>
       <div>{children}</div>
     </section>
   )
 }
 
-function Info({ label, value }: { label: string; value: string }) {
+function Info({ label, value }: { label: string; value: any }) {
   return (
     <div className="border border-slate-200 rounded-lg p-3">
       <div className="text-xs text-slate-500">{label}</div>
-      <div className="font-medium text-slate-900 break-words">{value}</div>
+      <div className="font-medium text-slate-900 flex justify-between break-words">
+        {value?.name?.toString() ?? value?.toString() ?? '-'}
+        {typeof value === 'object' && value?.url.startsWith('https://') && (
+          <a href={value?.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 ml-2"><Link2 size={20} /></a>
+        )}
+      </div>
     </div>
   )
 }

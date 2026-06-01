@@ -8,11 +8,30 @@ export default async function PlayersPage() {
   const schoolId = profile?.school_id
   if (!schoolId) return <div className="text-slate-500">No school assigned.</div>
 
-  const { data: players } = await supabase
-    .from('players')
-    .select('*')
-    .eq('school_id', schoolId)
-    .order('last_name')
+  const [{ data: players }, { data: activities }, { data: enrollments }] = await Promise.all([
+    supabase
+      .from('players')
+      .select('*')
+      .eq('school_id', schoolId)
+      .order('last_name'),
+    supabase
+      .from('sport_activities')
+      .select('id, name')
+      .eq('school_id', schoolId)
+      .eq('is_active', true)
+      .order('name'),
+    supabase
+      .from('player_activity')
+      .select('player_id, activity_id'),
+  ])
 
-  return <PlayersClient initialPlayers={players ?? []} schoolId={schoolId} currentUserId={user!.id} />
+  return (
+    <PlayersClient
+      initialPlayers={players ?? []}
+      initialActivities={activities ?? []}
+      initialEnrollments={enrollments ?? []}
+      schoolId={schoolId}
+      currentUserId={user!.id}
+    />
+  )
 }
